@@ -12,6 +12,8 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors());
 
+app.use("/uploads", express.static("uploads"));
+
 // Debug Logger (helps detect route issues)
 app.use((req, res, next) => {
     console.log("👉 Incoming:", req.method, req.url);
@@ -130,6 +132,15 @@ app.post("/api/auth/login", async (req, res) => {
     }
 });
 
+app.get("/api/test/submissions", async (req, res) => {
+    try {
+        const UserActivity = require("./models/UserActivity");
+        const submissions = await UserActivity.find().populate("activityId");
+        res.json(submissions);
+    } catch(err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 /* =======================
    404 HANDLER
@@ -148,3 +159,4 @@ app.listen(PORT, () => {
     console.log(`🚀 Server running at http://localhost:${PORT}`);
     console.log(`📍 Test: http://localhost:${PORT}/test`);
 });
+

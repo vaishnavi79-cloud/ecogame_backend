@@ -6,7 +6,79 @@ const teacherAuth = require("../middleware/teacherAuth");
 const UserActivity = require("../models/UserActivity");
 const User = require("../models/User");
 
-// GET all pending submissions
+// MULTER SETUP
+const multer = require("multer");
+const path = require("path");
+
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, "uploads/");
+    },
+    filename: function (req, file, cb) {
+        cb(null, Date.now() + path.extname(file.originalname));
+    }
+});
+
+const upload = multer({ storage });
+
+
+// =======================
+// SUBMIT ACTIVITY (STUDENT)
+// =======================
+router.post("/submit", auth, upload.single("proofImage"), async (req, res) => {
+    try {
+        const { userId, moduleNumber } = req.body;
+
+        const Activity = require("../models/Activity");
+
+        const activity = await Activity.findOne({
+            moduleNumber: parseInt(moduleNumber)
+        });
+
+        if (!activity) {
+            return res.status(404).json({ error: "Activity not found for this module" });
+        }
+
+        const existing = await UserActivity.findOne({
+            userId,
+            moduleNumber: parseInt(moduleNumber),
+            status: { $in: ["pending", "approved"] }
+        });
+
+        if (existing) {
+            return res.status(400).json({ error: "You have already submitted this module" });
+        }
+
+        let proofImage = "";
+        if (req.file) {
+            proofImage = `http://10.18.129.200:5000/uploads/${req.file.filename}`;;
+        }
+
+        const submission = new UserActivity({
+            userId,
+            activityId: activity._id,
+            moduleNumber: parseInt(moduleNumber),
+            proofImage,
+            status: "pending"
+        });
+
+        await submission.save();
+
+        res.status(201).json({
+            success: true,
+            message: "Submission received! Your teacher will review it soon.",
+            submission
+        });
+
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+
+// =======================
+// GET PENDING SUBMISSIONS
+// =======================
 router.get("/pending", auth, teacherAuth, async (req, res) => {
     try {
         const activities = await UserActivity.find({ status: "pending" })
@@ -20,7 +92,10 @@ router.get("/pending", auth, teacherAuth, async (req, res) => {
     }
 });
 
-// GET all submissions (all statuses)
+
+// =======================
+// GET ALL SUBMISSIONS
+// =======================
 router.get("/all", auth, teacherAuth, async (req, res) => {
     try {
         const activities = await UserActivity.find()
@@ -34,7 +109,10 @@ router.get("/all", auth, teacherAuth, async (req, res) => {
     }
 });
 
-// APPROVE submission + add points + save feedback
+
+// =======================
+// APPROVE SUBMISSION
+// =======================
 router.post("/approve/:id", auth, teacherAuth, async (req, res) => {
     try {
         const { feedback } = req.body;
@@ -48,24 +126,30 @@ router.post("/approve/:id", auth, teacherAuth, async (req, res) => {
         if (submission.status === "approved")
             return res.status(400).json({ error: "Already approved" });
 
-        // Update submission
         submission.status = "approved";
         submission.feedback = feedback || "Great work!";
         await submission.save();
 
-        // Add points to student
         const points = submission.activityId?.points || 10;
+
         await User.findByIdAndUpdate(submission.userId, {
             $inc: { ecoPoints: points }
         });
 
-        res.json({ success: true, message: "Submission approved and points added" });
+        res.json({
+            success: true,
+            message: "Submission approved and points added"
+        });
+
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-// REJECT submission + save feedback
+
+// =======================
+// REJECT SUBMISSION
+// =======================
 router.post("/reject/:id", auth, teacherAuth, async (req, res) => {
     try {
         const { feedback } = req.body;
@@ -79,13 +163,20 @@ router.post("/reject/:id", auth, teacherAuth, async (req, res) => {
         submission.feedback = feedback || "Please try again.";
         await submission.save();
 
-        res.json({ success: true, message: "Submission rejected" });
+        res.json({
+            success: true,
+            message: "Submission rejected"
+        });
+
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-// GET submissions for a specific student
+
+// =======================
+// GET USER SUBMISSIONS
+// =======================
 router.get("/user/:userId", auth, async (req, res) => {
     try {
         const activities = await UserActivity.find({ userId: req.params.userId })
@@ -97,5 +188,6 @@ router.get("/user/:userId", auth, async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+
 
 module.exports = router;

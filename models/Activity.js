@@ -32,6 +32,10 @@ const ActivitySchema = new mongoose.Schema({
         type: String,
         default: null,
     },
+    moduleNumber: {
+        type: Number,
+        default: null,
+    },
     gameType: {
         type: String,
         enum: ['interactive_game', 'photo_proof', 'quiz'],
